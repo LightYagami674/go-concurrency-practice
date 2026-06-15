@@ -11,6 +11,29 @@ type Task func() int
 // slice is not — it must align with the input.
 //
 // TODO: implement.
+
+type TaskResult struct {
+	TaskIndex  int
+	TaskResult int
+}
+
 func Dispatch(tasks []Task) []int {
-	panic("not implemented")
+	ch := make(chan TaskResult)
+
+	n := len(tasks)
+	result := make([]int, n)
+
+	for i, task := range tasks {
+		go func() {
+			taskResult := task()
+			ch <- TaskResult{i, taskResult}
+		}()
+	}
+
+	for range tasks {
+		taskResult := <-ch
+		result[taskResult.TaskIndex] = taskResult.TaskResult
+	}
+
+	return result
 }
