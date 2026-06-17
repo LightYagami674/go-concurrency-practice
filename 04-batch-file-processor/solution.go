@@ -1,5 +1,7 @@
 package batchfileprocessor
 
+import "sync"
+
 // FileResult is the outcome of processing a single file.
 type FileResult struct {
 	Name string // the file name (from the input slice)
@@ -32,7 +34,24 @@ type Summary struct {
 //     every exit path, including when process returns an error.
 //   - Wait for all goroutines before returning.
 func ProcessAll(files []string, process func(name string) (int, error)) []FileResult {
-	panic("not implemented")
+	wg := sync.WaitGroup{}
+	n := len(files)
+	fileRes := make([]FileResult, n)
+
+	for idx, f := range files {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res := FileResult{
+				Name: f,
+			}
+			res.Size, res.Err = process(f)
+			fileRes[idx] = res
+		}()
+	}
+
+	wg.Wait()
+	return fileRes
 }
 
 // Summarize aggregates results into a Summary. It is a pure function — no
@@ -40,5 +59,20 @@ func ProcessAll(files []string, process func(name string) (int, error)) []FileRe
 //
 // TODO: implement. Count successes vs failures and sum Size over the successes.
 func Summarize(results []FileResult) Summary {
-	panic("not implemented")
+	totalSize, failed := 0, 0
+
+	for _, r := range results {
+		if r.Err != nil {
+			failed++
+		} else {
+			totalSize += r.Size
+		}
+	}
+
+	return Summary{
+		Total:     len(results),
+		Succeeded: len(results) - failed,
+		Failed:    failed,
+		TotalSize: totalSize,
+	}
 }
