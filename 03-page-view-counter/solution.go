@@ -1,6 +1,9 @@
 package pageviewcounter
 
-import "sync"
+import (
+	"maps"
+	"sync"
+)
 
 // Counter is a concurrency-safe map of page path -> view count.
 //
@@ -15,21 +18,52 @@ type Counter struct {
 // NewCounter returns an empty, ready-to-use Counter.
 func NewCounter() *Counter {
 	// TODO: initialize the map so Inc can write to it.
-	panic("not implemented")
+	return &Counter{
+		counts: make(map[string]int),
+	}
 }
 
 // Inc records one view of page. Safe to call from many goroutines.
-func (c *Counter) Inc(page string) { panic("not implemented") }
+func (c *Counter) Inc(page string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.counts[page] += 1
+}
 
 // Get returns the current view count for page (0 if never seen).
-func (c *Counter) Get(page string) int { panic("not implemented") }
+func (c *Counter) Get(page string) int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.counts[page]
+}
 
 // Snapshot returns a COPY of all counts. Mutating the returned map must not
 // affect the Counter, and concurrent Inc calls must not race with the copy.
-func (c *Counter) Snapshot() map[string]int { panic("not implemented") }
+func (c *Counter) Snapshot() map[string]int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	newMap := make(map[string]int)
+	maps.Copy(newMap, c.counts)
+
+	return newMap
+}
 
 // Total returns the sum of all page view counts.
-func (c *Counter) Total() int { panic("not implemented") }
+func (c *Counter) Total() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	sum := 0
+
+	for _, v := range c.counts {
+		sum += v
+	}
+
+	return sum
+}
 
 // --- Bonus: why the "naive" version is broken --------------------------------
 //
