@@ -1,5 +1,7 @@
 package boundedbuffer
 
+import "sync"
+
 // BoundedBuffer is a fixed-capacity FIFO queue that blocks producers when full
 // and consumers when empty, using sync.Cond for waiting and signaling.
 //
@@ -14,6 +16,11 @@ package boundedbuffer
 // conds (one per side) with Signal is the idiomatic, efficient choice.
 type BoundedBuffer struct {
 	// TODO: fields.
+	items    []int
+	capacity int
+	mu       sync.Mutex
+	notFull  *sync.Cond
+	notEmpty *sync.Cond
 }
 
 // NewBoundedBuffer returns a buffer that holds at most capacity items.
@@ -21,7 +28,14 @@ type BoundedBuffer struct {
 //
 // TODO: initialize the mutex-backed cond(s) with sync.NewCond(&b.mu).
 func NewBoundedBuffer(capacity int) *BoundedBuffer {
-	panic("not implemented")
+	bb := BoundedBuffer{
+		capacity: capacity,
+		items:    make([]int, 0, capacity),
+	}
+
+	bb.notEmpty = sync.NewCond(&bb.mu)
+	bb.notFull = sync.NewCond(&bb.mu)
+	return &bb
 }
 
 // Put appends item, blocking while the buffer is full.
@@ -29,7 +43,15 @@ func NewBoundedBuffer(capacity int) *BoundedBuffer {
 // TODO: lock; `for len == capacity { notFull.Wait() }`; append; signal a
 // consumer (notEmpty.Signal); unlock.
 func (b *BoundedBuffer) Put(item int) {
-	panic("not implemented")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for len(b.items) == b.capacity {
+		b.notFull.Wait()
+	}
+
+	b.items = append(b.items, item)
+	b.notEmpty.Signal()
+
 }
 
 // Get removes and returns the oldest item, blocking while the buffer is empty.
@@ -37,12 +59,26 @@ func (b *BoundedBuffer) Put(item int) {
 // TODO: lock; `for len == 0 { notEmpty.Wait() }`; pop the front; signal a
 // producer (notFull.Signal); unlock and return the item.
 func (b *BoundedBuffer) Get() int {
-	panic("not implemented")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for len(b.items) == 0 {
+		b.notEmpty.Wait()
+	}
+	last := b.items[0]
+	b.items = b.items[1:]
+
+	b.notFull.Signal()
+
+	return last
 }
 
 // Len returns the current number of buffered items.
 //
 // TODO: lock, read len, unlock.
 func (b *BoundedBuffer) Len() int {
-	panic("not implemented")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return len(b.items)
 }
