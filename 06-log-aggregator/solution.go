@@ -1,5 +1,7 @@
 package logaggregator
 
+import "sync"
+
 // Producer generates log lines by calling emit once per line.
 type Producer func(emit func(line string))
 
@@ -20,5 +22,28 @@ type Producer func(emit func(line string))
 //   - consumer (main path): for line := range ch { collect line }
 //   - return the collected lines after the range loop ends.
 func Aggregate(producers []Producer, bufSize int) []string {
-	panic("not implemented")
+	ch := make(chan string, bufSize)
+
+	wg := sync.WaitGroup{}
+
+	for _, producer := range producers {
+		wg.Go(func() {
+			producer(func(line string) {
+				ch <- line
+			})
+		})
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	result := make([]string, 0, len(producers))
+
+	for line := range ch {
+		result = append(result, line)
+	}
+
+	return result
 }
