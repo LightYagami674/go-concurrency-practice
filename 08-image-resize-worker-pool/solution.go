@@ -1,5 +1,7 @@
 package imageresizeworkerpool
 
+import "sync"
+
 // Job is a unit of resize work.
 type Job struct {
 	ID     int
@@ -29,11 +31,42 @@ type ResizeFunc func(job Job) Result
 //   - jobsCh := make(chan Job); resultsCh := make(chan Result)
 //   - feeder: go func(){ for _, j := range jobs { jobsCh <- j }; close(jobsCh) }()
 //   - var wg sync.WaitGroup; start exactly `workers` workers:
-//       wg.Add(1); go func(){ defer wg.Done(); for j := range jobsCh {
-//           resultsCh <- resize(j) } }()
+//     wg.Add(1); go func(){ defer wg.Done(); for j := range jobsCh {
+//     resultsCh <- resize(j) } }()
 //   - coordinator: go func(){ wg.Wait(); close(resultsCh) }()  // the ONLY close
 //   - collect (main path): for r := range resultsCh { append }
 //   - clamp workers to len(jobs) when it's larger; handle len(jobs)==0.
 func ResizePool(jobs []Job, workers int, resize ResizeFunc) []Result {
-	panic("not implemented")
+	jobsCh := make(chan Job)
+	resultsCh := make(chan Result, workers)
+	result := make([]Result, 0)
+
+	wg := sync.WaitGroup{}
+
+	for range workers {
+		wg.Go(func() {
+			for job := range jobsCh {
+				resultsCh <- resize(job)
+			}
+		})
+	}
+
+	go func() {
+		for _, job := range jobs {
+			jobsCh <- job
+		}
+
+		close(jobsCh)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	for res := range resultsCh {
+		result = append(result, res)
+	}
+
+	return result
 }
