@@ -20,17 +20,68 @@ type LossyResult struct {
 // TODO: implement. Suggested shape:
 //   - buf := make(chan int, bufSize)
 //   - generator goroutine: for i := 1..n {
-//         select { case buf <- i: ; default: dropped++ }
+//     select { case buf <- i: ; default: dropped++ }
 //     }; close(buf)
 //     (count dropped with an int the goroutine owns; publish it when done, e.g.
 //     via a done channel or an atomic, so Run can read it after the pipeline
 //     ends.)
 //   - square goroutine (SLOW): for v := range buf { time.Sleep(slowPerItem);
-//         processed++; out <- v*v }; close(out)
+//     processed++; out <- v*v }; close(out)
 //   - filterEven goroutine: for v := range out { if v%2==0 { evens <- v } };
-//         close(evens)
+//     close(evens)
 //   - collect: for v := range evens { Output = append(...) }
 //   - return LossyResult{Output, Processed, Dropped}
+//
+
 func Run(n, bufSize int, slowPerItem time.Duration) LossyResult {
-	panic("not implemented")
+	buf := make(chan int, bufSize)
+	squareOut := make(chan int)
+	evenOut := make(chan int)
+
+	dropped := 0
+	processed := 0
+	// generator
+	go func() {
+		for i := 1; i <= n; i++ {
+			select {
+			case buf <- i:
+			default:
+				dropped++
+
+			}
+		}
+
+		close(buf)
+	}()
+
+	//square
+	go func() {
+		defer close(squareOut)
+		for v := range buf {
+			time.Sleep(slowPerItem)
+			processed++
+			squareOut <- v * v
+		}
+	}()
+
+	// even
+	go func() {
+		defer close(evenOut)
+		for v := range squareOut {
+			if v%2 == 0 {
+				evenOut <- v
+			}
+		}
+	}()
+
+	var result []int
+	for v := range evenOut {
+		result = append(result, v)
+	}
+
+	return LossyResult{
+		Output:    result,
+		Processed: processed,
+		Dropped:   dropped,
+	}
 }
